@@ -1,2 +1,15 @@
+# dotenv environment variable files
 .env
+
+# excel ㅍㅏ일 제외
+*.xlsx
+
+
+# Logs
+logs
+
+# *.xlsx
+*.xlsx
+
+
 vcs
