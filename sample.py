@@ -7,6 +7,7 @@ import datetime
 import psycopg2
 import sqlalchemy
 from utils.dateutil import quarter_get
+from utils.database import update_row
 import json
 
 from fastapi import FastAPI
@@ -31,21 +32,24 @@ def db_engine_get():
     return db_engine
 
 
+
 def get_stat_list(lrg_div: str, sml_div_list: list):
+    """
+    [FISIS002] 금융감독원 통계 리스트 조회
+    """
     api_url = f'{host_url}fisis/stat-list?lrg_div={lrg_div}&sml_div_list={str(sml_div_list)}'
     response = requests.get(api_url)
-
     stat_list = pd.DataFrame(response.json())
-    print(stat_list)
     return stat_list
 
 
 def get_orgn_list(part_div: str):
+    """
+    [FISIS001] 금융감독원 금융기관 조회
+    """
     api_url = f'{host_url}fisis/orgn-list?part_div={part_div}'
     response = requests.get(api_url)
-
     orgn_list = pd.DataFrame(response.json())
-    print(orgn_list)
     return orgn_list
 
 
@@ -113,12 +117,13 @@ def call_api_info_get(rcve_orgn: str, idx_peri: str = None):
     # API 호출 대상 내역 조회
     select_query = f"select * from {table_schema}.{table_name} where rcve_orgn = {rcve_orgn} and rcve_yn = 'Y'"
 
+    # 주기별 조건이 있을때
     if idx_peri is not None:
         select_query += f' and idx_peri = {idx_peri}'
 
-    print('----------------')
+    print('-------------------------')
     print(select_query)
-    print('----------------')
+    print('-------------------------')
 
     api_list = pd.read_sql_query(select_query, db_engine)
     db_engine.dispose()
@@ -127,12 +132,15 @@ def call_api_info_get(rcve_orgn: str, idx_peri: str = None):
 
 
 def stat_info_get():
+    """
+    [FISIS003] 금융감독원 API 데이터 조회
+    """
     # 분기 일자
     quarter = quarter_get(datetime.datetime(2023, 4, 13))
 
     item_list_df = pd.DataFrame()  # 저장을 위한 dataframe
 
-    api_list = call_api_info_get("'FISIS'")
+    api_list = call_api_info_get("'FISIS'") # API List 조회
 
     # API 호출
     with tqdm(total=len(api_list)) as progress_bar:
@@ -158,17 +166,13 @@ def stat_info_get():
 
     return json_response(content=json_response)
 
-    # # DB 저장
-    # item_list_df.to_sql(
-    #     'tbl_iia_iam_fisis',
-    #     db_engine,
-    #     schema='imd_ia',
-    #     if_exists='replace', # PK row 있는경우 replace
-    #     index=False
-    # )
 
 
 def ecos_api_list_store():
+    """
+    한국은행 API 리스트 저장
+    :return:
+    """
     api_list = pd.read_excel('./api_detail_item_list_rcve.xlsx')
 
     idx_id_list = []  # API ID : [STAT_CODE]-[CYCLE]-[ITEM_CODE]
@@ -224,6 +228,9 @@ def ecos_api_list_store():
 
 
 def seperator_period(period, date_value):
+    """
+    date_value 날짜에 해당하는 Period 구분값 조회
+    """
     result = str()
 
     if period == 'A':
@@ -252,6 +259,7 @@ def seperator_period(period, date_value):
 
 def ecos_start_date(cycle: str, base_date: str):
     """
+        한국은행 api 배치 수행시 기준일자 대비 cycle 별 시작 일자 조회
         M : 4개월 전 ~ 전월
         D : 5일 전 ~ 당일
         A : 2년전 ~ 전년
@@ -279,10 +287,7 @@ def ecos_start_date(cycle: str, base_date: str):
 
 def call_ecos_api(cycle: str, base_date: str):
     """
-        M : 4개월 전 ~ 전월
-        D : 5일 전 ~ 당일
-        A : 2년전 ~ 전년
-        Q : 6개월전 ~ 당분기
+    [ECOS001] 한국은행 API 데이터 조회
     """
 
     # 1. api list 조회
@@ -316,14 +321,61 @@ def call_ecos_api(cycle: str, base_date: str):
                 print(temp_df)
                 api_data_df = pd.concat([api_data_df, temp_df])
 
-            time.sleep(0.5)
+            time.sleep(0.5) # 3분에 300개 하면 너무 많은 호출이라고 오류남
             progress_bar.update(1)
 
     api_data_df.to_excel(f'./ecos_data_{remove_delimite_cycle}.xlsx')
 
     reload_df = pd.read_excel(f'./ecos_data_{remove_delimite_cycle}.xlsx')
     print(reload_df.info())
+    json_response = api_data_df.to_json(orient='records')
 
+    return json_response(content=json_response)
+
+
+def call_kosis_api(base_date: str):
+    """
+    [KOSIS001] 통계청 API 호출
+    """
+    kosis_df = call_api_info_get("'KOSIS'")
+    print(kosis_df)
+
+    api_data = pd.DataFrame()
+
+    with tqdm(total=len(kosis_df[811:815])) as progress_bar:
+        for index, row in kosis_df[811:815].iterrows():
+            prdDe = seperator_period(row['idx_peri'],base_date)
+
+            api_url = f"{host_url}kosis/api-data?prd_de={prdDe}&jipyo_id={row['idx_id']}"
+
+            response = requests.get(api_url)
+
+            if 'err' not in response.json():
+                temp_df = pd.DataFrame(response.json())
+                api_data = pd.concat([api_data, temp_df])
+
+            time.sleep(0.33)
+            progress_bar.update(1)
+
+    api_data.to_excel('./kosis_api_data.xlsx')
+
+
+
+def save_kosis_api_list():
+    kosis_list = pd.read_excel('./kosis_list.xlsx')
+    print(kosis_list)
+
+    engine = db_engine_get()
+
+    kosis_list.to_sql(
+        'tbl_iia_iam_idxinfo',
+        engine,
+        schema='imd_ia',
+        if_exists='append',
+        index=False
+    )
+    engine.execute('commit;')
+    engine.dispose()
 
 
 if __name__ == "__main__":
@@ -347,6 +399,60 @@ if __name__ == "__main__":
     # api_list = call_api_info_get("'BOK'")
     # api_list.to_excel('./api_bok_list.xlsx')
 
-    call_ecos_api("'M'", '20231017')
+    # call_ecos_api("'D'", '20231017')
+
+    # call_kosis_api('20231019')
+    #
+    engine = db_engine_get()
+    #
+    # sample_dict = {'rcve_orgn': 'KOSIS',
+    #                'idx_id': '100000',
+    #                'user_id': '2130049',
+    #                'prgm_id': 'python-code',
+    #                'idx_nm': 'sample_nm',
+    #                'data_lgcf_nm': 'nm',
+    #                'data_mdcf_nm': 'test',
+    #                'rgn_cls': '안녕',
+    #                'idx_peri': 'Q',
+    #                'unit': '원',
+    #                'rcve_yn': 'Y'
+    #                }
+    #
+    # sample_dict = {'rcve_orgn': 'KOSIS',
+    #                'idx_id': '100000',
+    #                'idx_pont': '20231023',
+    #                'detl_item': 'what',
+    #                'user_id': '2130049',
+    #                'prgm_id': 'python-code',
+    #                'idx_nm': 'sample_nm',
+    #                'data_lgcf_nm': 'nm',
+    #                'idx_val': 15,
+    #                'unit': 'Q',
+    #                'rcve_dt': '20231023'
+    #                }
+
+    sample_dict = {'list_no': 'KOSIS',
+                   'list_nm': '100000',
+                   'base_month': '20231023',
+                   'finance_cd': 'what',
+                   'finance_nm': '2130049',
+                   'account_cd': 'python-code',
+                   'account_nm': 'sample_nm',
+                   'a': 'a',
+                   'b': 'b',
+                   'c': 'c'
+                   }
+
+    update_row(engine,'imd_ia.tbl_iia_iam_fisis', sample_dict)
+
+
+
+    #
+    # save_idx_info(engine, sample_dict)
+    #
+    # print(type(engine))
+
+
+    # save_kosis_api_list()
 
 # 한국은행 array(['M', 'Q', 'S', 'D', 'SM', 'A'], dtype=object)

@@ -10,7 +10,7 @@ req_start = '1'
 req_end = '1000'
 
 
-def get_ecos_api_data(stat_code: str, cycle: str, start: str, end: str, item_code: str, api_key: str):
+def send_ecos_api_data(stat_code: str, cycle: str, start: str, end: str, item_code: str, api_key: str):
     """
         한국은행 API 호출
     """

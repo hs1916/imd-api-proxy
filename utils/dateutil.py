@@ -30,3 +30,30 @@ def quarter_get(date_value):
     quarter = quarter_date.strftime('%Y%m')
 
     return quarter
+
+
+def seperator_period(period, date_value):
+    result = str()
+
+    if 'Y' in period:
+        result = date_value[:4]
+    elif period == 'M':
+        result = date_value[:6]
+    elif period == 'D':
+        result = date_value
+    elif period == 'Q':
+        if date_value[4:6] == '01' or date_value[4:6] == '02' or date_value[4:6] == '03':
+            result = date_value[:4] + '1Q'
+        elif date_value[4:6] == '04' or date_value[4:6] == '05' or date_value[4:6] == '06':
+            result = date_value[:4] + '2Q'
+        elif date_value[4:6] == '07' or date_value[4:6] == '08' or date_value[4:6] == '09':
+            result = date_value[:4] + '3Q'
+        elif date_value[4:6] == '10' or date_value[4:6] == '11' or date_value[4:6] == '12':
+            result = date_value[:4] + '4Q'
+    elif period == 'S' or period == 'SM':
+        if int(date_value[4:6]) <= 6:
+            result = date_value[:4] + '1S'
+        else:
+            result = date_value[:4] + '2S'
+
+    return result

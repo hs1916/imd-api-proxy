@@ -46,6 +46,14 @@ def orgn_list_get(part_div, api_key):
 
 
 def statistic_info_get(finance_cd, list_no, quarter, api_key):
+    """
+    금융감독원 api 호출
+    :param finance_cd: 금융기관 코드
+    :param list_no: 통계 목록 번호
+    :param quarter: 주기
+    :param api_key: 금융감독원 api key
+    :return:
+    """
     api_url_prefix = 'http://fisis.fss.or.kr/openapi/statisticsInfoSearch.json?lang=kr'
     info_api_url = f'{api_url_prefix}&auth={api_key}&financeCd={finance_cd}&listNo={list_no}&term=Q&startBaseMm={quarter}&endBaseMm={quarter}'
     response = object()
